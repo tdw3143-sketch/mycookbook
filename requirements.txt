@@ -1,0 +1,10 @@
+flask
+flask-sqlalchemy
+flask-login
+werkzeug
+requests
+beautifulsoup4
+anthropic
+python-dotenv
+gunicorn
+psycopg2-binary

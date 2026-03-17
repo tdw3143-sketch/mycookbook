@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>MyCookbook</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#4CAF50">
+
+  <!-- iOS Safari PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MyCookbook">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+
+  <link rel="stylesheet" href="/static/style.css?v=2">
+  <link rel="icon" href="/static/icons/icon-192.png">
+</head>
+<body>
+
+  <!-- ======================================================
+       Navbar
+  ====================================================== -->
+  <nav class="navbar">
+    <div class="navbar-brand">🍳 My<span>Cookbook</span></div>
+    <ul class="nav-links">
+      <li><a href="#" data-view="recipes"  class="active">Recipes</a></li>
+      <li><a href="#" data-view="mealplan">Meal Plan</a></li>
+      <li><a href="#" data-view="shopping">Shopping List</a></li>
+    </ul>
+    <button class="btn-logout" id="logout-btn" style="display:none">Sign out</button>
+  </nav>
+
+  <!-- ======================================================
+       Auth screen (shown when not logged in)
+  ====================================================== -->
+  <div id="auth-screen" style="display:none">
+    <div class="auth-card">
+      <div class="auth-logo">🍳 MyCookbook</div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Sign in</button>
+        <button class="auth-tab" data-tab="register">Create account</button>
+      </div>
+
+      <form id="auth-form" autocomplete="on">
+        <div class="auth-field">
+          <label for="auth-email">Email</label>
+          <input type="email" id="auth-email" autocomplete="email" placeholder="you@example.com" required>
+        </div>
+        <div class="auth-field">
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" autocomplete="current-password" placeholder="••••••••" required>
+        </div>
+        <div id="auth-error" class="auth-error" style="display:none"></div>
+        <button type="submit" class="btn btn-primary auth-submit" id="auth-submit-btn">Sign in</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ======================================================
+       Main content
+  ====================================================== -->
+  <main class="main-content" id="app-root" style="display:none">
+
+    <!-- ==================== RECIPES VIEW ==================== -->
+    <section class="view active" id="view-recipes">
+
+      <!-- Import card -->
+      <div class="import-section">
+        <h2>Import a Recipe</h2>
+        <p>Paste a recipe URL, or upload a photo of a recipe.</p>
+        <div class="import-row">
+          <input
+            type="url"
+            id="import-url"
+            placeholder="https://www.allrecipes.com/recipe/..."
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <button class="btn btn-primary btn-lg" id="import-btn">
+            Import
+          </button>
+          <button class="btn btn-secondary btn-lg" id="import-photo-btn">
+            📷 Photo
+          </button>
+          <input type="file" id="import-image-input" accept="image/*" style="display:none">
+        </div>
+        <div id="import-spinner" class="spinner-wrap hidden" style="margin-top:16px">
+          <div class="spinner"></div>
+          <p>Fetching recipe…</p>
+        </div>
+      </div>
+
+      <!-- Search bar -->
+      <div class="search-filter-section">
+        <input
+          type="text"
+          id="search-input"
+          class="search-bar"
+          placeholder="Search recipes or ingredients…"
+          autocomplete="off"
+        >
+        <!-- Tag filter chips -->
+        <div class="tag-chips" id="tag-chips">
+          <button class="tag-chip active" data-tag="All">All</button>
+          <button class="tag-chip" data-tag="Vegetarian">Vegetarian</button>
+          <button class="tag-chip" data-tag="Vegan">Vegan</button>
+          <button class="tag-chip" data-tag="Quick">Quick (&lt;30min)</button>
+          <button class="tag-chip" data-tag="Pasta">Pasta</button>
+          <button class="tag-chip" data-tag="Chicken">Chicken</button>
+          <button class="tag-chip" data-tag="Fish">Fish</button>
+          <button class="tag-chip" data-tag="Beef">Beef</button>
+          <button class="tag-chip" data-tag="Soup">Soup</button>
+        </div>
+      </div>
+
+      <!-- Recipe grid -->
+      <div class="section-header">
+        <h2>My Recipes <span class="recipe-count" id="recipe-count">(0)</span></h2>
+      </div>
+      <div class="recipe-grid" id="recipe-grid"></div>
+
+    </section>
+
+    <!-- ==================== MEAL PLAN VIEW ==================== -->
+    <section class="view" id="view-mealplan">
+      <div class="section-header" style="margin-bottom:24px">
+        <h2>Meal Plan</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" id="save-week-btn">💾 Save week</button>
+          <button class="btn btn-danger btn-sm" id="clear-week-btn">🗑 Clear week</button>
+        </div>
+      </div>
+
+      <div class="mealplan-layout">
+        <!-- 7-day grid -->
+        <div>
+          <div class="day-grid" id="day-grid">
+            <!-- rendered by JS -->
+          </div>
+
+          <!-- Saved weeks collapsible section -->
+          <div class="saved-weeks-section" id="saved-weeks-section" style="margin-top:28px">
+            <button class="saved-weeks-toggle" id="saved-weeks-toggle">
+              <span>📋 Saved weeks</span>
+              <span class="toggle-arrow" id="toggle-arrow">▼</span>
+            </button>
+            <div class="saved-weeks-list" id="saved-weeks-list" style="display:none">
+              <!-- rendered by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="mealplan-sidebar">
+          <h3>Settings</h3>
+
+          <div class="people-ctrl">
+            <label>People</label>
+            <div class="number-input">
+              <button id="people-minus">−</button>
+              <span id="people-display">2</span>
+              <button id="people-plus">+</button>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" style="width:100%" id="gen-shopping-btn">
+            🛒 Generate Shopping List
+          </button>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ==================== SHOPPING LIST VIEW ==================== -->
+    <section class="view" id="view-shopping">
+      <div class="section-header" style="margin-bottom:24px">
+        <h2>Shopping List</h2>
+      </div>
+
+      <div class="shopping-layout">
+        <!-- Main list -->
+        <div class="shopping-list-panel" id="shopping-list-panel">
+          <div style="text-align:center;color:var(--text-muted);padding:60px 0">
+            <div style="font-size:2.5rem;margin-bottom:12px">🛒</div>
+            <p>Add recipes to your meal plan first,<br>then generate the shopping list here.</p>
+          </div>
+        </div>
+
+        <!-- Controls sidebar -->
+        <aside class="shopping-controls">
+          <h3>Store</h3>
+          <div class="store-toggle">
+            <input type="radio" name="store" id="store-ah" value="Albert Heijn" checked>
+            <label for="store-ah">Albert Heijn</label>
+            <input type="radio" name="store" id="store-lidl" value="Lidl">
+            <label for="store-lidl">Lidl</label>
+          </div>
+
+          <!-- AH authentication section (shown only when AH is selected) -->
+          <div id="ah-auth-section" style="display:none;margin-top:14px">
+            <div id="ah-status-disconnected">
+              <button class="btn btn-secondary" style="width:100%" id="ah-connect-btn">
+                🔗 Connect Albert Heijn
+              </button>
+            </div>
+            <div id="ah-status-connected" style="display:none">
+              <div class="ah-connected-badge">✓ Albert Heijn connected</div>
+              <button class="btn btn-secondary btn-sm" id="ah-disconnect-btn" style="width:100%;margin-top:6px">
+                Disconnect
+              </button>
+            </div>
+            <button class="btn btn-primary" style="width:100%;margin-top:10px" id="ah-send-btn" disabled>
+              🛒 Send to AH app
+            </button>
+          </div>
+
+          <button class="btn btn-primary" style="width:100%;margin-top:14px;margin-bottom:8px" onclick="renderShoppingList()">
+            ↻ Refresh List
+          </button>
+          <button class="btn btn-secondary" style="width:100%" onclick="window.print()">
+            🖨️ Print
+          </button>
+        </aside>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ======================================================
+       Recipe Detail Modal
+  ====================================================== -->
+  <div class="modal-backdrop" id="recipe-modal" role="dialog" aria-modal="true">
+    <div class="modal">
+
+      <div class="modal-hero" id="modal-hero">
+        <div class="modal-hero-placeholder">🍽️</div>
+      </div>
+      <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
+      <button class="modal-edit-btn" id="modal-edit-btn" aria-label="Edit recipe" title="Edit recipe">✏️</button>
+
+      <div class="modal-body">
+        <!-- VIEW MODE -->
+        <div id="modal-view-mode">
+          <h1 class="modal-title" id="modal-title"></h1>
+          <div class="modal-meta" id="modal-meta"></div>
+          <p class="modal-desc" id="modal-desc"></p>
+
+          <!-- Nutrition badges -->
+          <div class="nutrition-row hidden" id="modal-nutrition"></div>
+
+          <!-- Two-column: ingredients + instructions -->
+          <div class="recipe-columns">
+            <div>
+              <div class="col-title">Ingredients</div>
+              <ul class="ingredients-list" id="modal-ingredients"></ul>
+            </div>
+            <div>
+              <div class="col-title">Instructions</div>
+              <ol class="instructions-list" id="modal-instructions"></ol>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-primary" id="add-to-mealplan-btn">📅 Add to Meal Plan</button>
+            <span class="source-link hidden" id="modal-source"></span>
+          </div>
+        </div>
+
+        <!-- EDIT MODE -->
+        <div id="modal-edit-mode" style="display:none">
+          <div class="edit-field-group">
+            <label class="edit-label" for="edit-title">Title</label>
+            <input type="text" id="edit-title" class="edit-input">
+          </div>
+          <div class="edit-field-group">
+            <label class="edit-label" for="edit-desc">Description</label>
+            <textarea id="edit-desc" class="edit-textarea" rows="3"></textarea>
+          </div>
+          <div class="edit-field-row">
+            <div class="edit-field-group" style="flex:1">
+              <label class="edit-label" for="edit-servings">Servings</label>
+              <input type="number" id="edit-servings" class="edit-input" min="1" style="max-width:100px">
+            </div>
+            <div class="edit-field-group" style="flex:1">
+              <label class="edit-label" for="edit-preptime">Prep Time</label>
+              <input type="text" id="edit-preptime" class="edit-input" placeholder="e.g. 15 min">
+            </div>
+            <div class="edit-field-group" style="flex:1">
+              <label class="edit-label" for="edit-cooktime">Cook Time</label>
+              <input type="text" id="edit-cooktime" class="edit-input" placeholder="e.g. 30 min">
+            </div>
+          </div>
+          <div class="edit-field-group">
+            <label class="edit-label" for="edit-ingredients">Ingredients <span style="font-weight:400;color:var(--text-muted)">(one per line)</span></label>
+            <textarea id="edit-ingredients" class="edit-textarea" rows="8"></textarea>
+          </div>
+          <div class="edit-field-group">
+            <label class="edit-label" for="edit-instructions">Instructions <span style="font-weight:400;color:var(--text-muted)">(one per line)</span></label>
+            <textarea id="edit-instructions" class="edit-textarea" rows="8"></textarea>
+          </div>
+          <div class="edit-field-group">
+            <label class="edit-label" for="edit-image">Photo URL</label>
+            <input type="url" id="edit-image" class="edit-input" placeholder="https://…">
+          </div>
+          <div class="edit-field-group">
+            <label class="edit-label">Tags</label>
+            <div class="edit-tags-checkboxes" id="edit-tags-checkboxes"></div>
+          </div>
+          <div class="edit-actions">
+            <button class="btn btn-primary" id="edit-save-btn">Save</button>
+            <button class="btn btn-secondary" id="edit-cancel-btn">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================
+       Import Preview Modal
+  ====================================================== -->
+  <div class="modal-backdrop" id="preview-modal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:700px">
+      <button class="modal-close" id="preview-close" aria-label="Close">✕</button>
+      <div class="modal-body" style="padding-top:52px">
+        <h2 style="margin-bottom:4px;font-size:1.2rem">Preview &amp; edit before saving</h2>
+        <p style="color:var(--text-muted);font-size:.88rem;margin-bottom:20px">Review the extracted recipe. Edit any field, then save to your library.</p>
+
+        <div class="edit-field-group">
+          <label class="edit-label" for="preview-title">Title</label>
+          <input type="text" id="preview-title" class="edit-input">
+        </div>
+        <div class="edit-field-group">
+          <label class="edit-label" for="preview-desc">Description</label>
+          <textarea id="preview-desc" class="edit-textarea" rows="3"></textarea>
+        </div>
+        <div class="edit-field-row">
+          <div class="edit-field-group" style="flex:1">
+            <label class="edit-label" for="preview-servings">Servings</label>
+            <input type="number" id="preview-servings" class="edit-input" min="1" style="max-width:100px">
+          </div>
+          <div class="edit-field-group" style="flex:1">
+            <label class="edit-label" for="preview-preptime">Prep Time</label>
+            <input type="text" id="preview-preptime" class="edit-input" placeholder="e.g. 15 min">
+          </div>
+          <div class="edit-field-group" style="flex:1">
+            <label class="edit-label" for="preview-cooktime">Cook Time</label>
+            <input type="text" id="preview-cooktime" class="edit-input" placeholder="e.g. 30 min">
+          </div>
+        </div>
+        <div class="edit-field-group">
+          <label class="edit-label" for="preview-ingredients">Ingredients <span style="font-weight:400;color:var(--text-muted)">(one per line)</span></label>
+          <textarea id="preview-ingredients" class="edit-textarea" rows="7"></textarea>
+        </div>
+        <div class="edit-field-group">
+          <label class="edit-label" for="preview-instructions">Instructions <span style="font-weight:400;color:var(--text-muted)">(one per line)</span></label>
+          <textarea id="preview-instructions" class="edit-textarea" rows="7"></textarea>
+        </div>
+        <div class="edit-field-group">
+          <label class="edit-label">Tags</label>
+          <div class="edit-tags-checkboxes" id="preview-tags-checkboxes"></div>
+        </div>
+
+        <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn btn-secondary" id="preview-discard-btn">Discard</button>
+          <button class="btn btn-primary" id="preview-save-btn">Save to library</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================
+       Multi-recipe picker (blog pages with several recipes)
+  ====================================================== -->
+  <div class="modal-backdrop" id="multi-picker-modal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:540px">
+      <button class="modal-close" id="multi-picker-close" aria-label="Close">✕</button>
+      <div class="modal-body" style="padding-top:52px">
+        <h2 style="margin-bottom:4px;font-size:1.15rem">Multiple recipes found</h2>
+        <p id="multi-picker-count" style="color:var(--text-muted);font-size:.9rem;margin-bottom:18px"></p>
+        <div id="multi-picker-list" style="display:flex;flex-direction:column;gap:10px;max-height:55vh;overflow-y:auto;padding-right:4px"></div>
+        <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn btn-secondary" onclick="closeMultiPicker()">Cancel</button>
+          <button class="btn btn-primary" id="multi-picker-save-btn">Save selected</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================
+       Recipe Picker Modal (for Meal Plan + button)
+  ====================================================== -->
+  <div class="modal-backdrop" id="picker-modal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:420px">
+      <button class="modal-close" id="picker-close" aria-label="Close" style="position:absolute;top:14px;right:14px;z-index:5">✕</button>
+      <div class="modal-body" style="padding-top:48px">
+        <h2 style="margin-bottom:16px;font-size:1.15rem">Choose a Recipe</h2>
+        <div class="picker-list" id="picker-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================
+       Albert Heijn Connect Modal
+  ====================================================== -->
+  <div class="modal-backdrop" id="ah-connect-modal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:500px">
+      <button class="modal-close" id="ah-modal-close" aria-label="Close">✕</button>
+      <div class="modal-body" style="padding-top:52px">
+        <h2 style="margin-bottom:6px;font-size:1.15rem">Connect Albert Heijn</h2>
+        <p style="color:var(--text-muted);font-size:.88rem;margin-bottom:20px">
+          Follow these steps to link your AH account.
+        </p>
+        <ol class="ah-steps">
+          <li>Click <strong>Open AH Login</strong> below — a new tab will open.</li>
+          <li>Log in with your Albert Heijn account.</li>
+          <li>After logging in your browser will show an error page. That's expected. <strong>Copy the full URL</strong> from the address bar (it starts with <code>appie://</code>).</li>
+          <li>Paste it in the field below and click <strong>Connect</strong>.</li>
+        </ol>
+
+        <a
+          href="https://login.ah.nl/secure/oauth/authorize?client_id=appie-ios&response_type=code&redirect_uri=appie%3A%2F%2Flogin-exit"
+          target="_blank"
+          rel="noopener"
+          class="btn btn-secondary"
+          style="display:inline-block;margin-bottom:20px"
+        >↗ Open AH Login</a>
+
+        <div class="edit-field-group">
+          <label class="edit-label" for="ah-code-input">Paste the address-bar URL here</label>
+          <input
+            type="text"
+            id="ah-code-input"
+            class="edit-input"
+            placeholder="appie://login-exit?code=..."
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
+        <p id="ah-connect-error" style="color:var(--danger,#e53935);font-size:.85rem;margin-top:6px;display:none"></p>
+
+        <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn btn-secondary" id="ah-modal-cancel">Cancel</button>
+          <button class="btn btn-primary" id="ah-modal-connect-btn">Connect</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================
+       Toast container
+  ====================================================== -->
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="/static/app.js?v=2"></script>
+</body>
+</html>
