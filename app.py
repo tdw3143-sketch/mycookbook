@@ -152,6 +152,28 @@ with app.app_context():
 
 
 # ---------------------------------------------------------------------------
+# Auto-login: bypass auth for now — remove this block to re-enable accounts
+# ---------------------------------------------------------------------------
+_AUTO_LOGIN_EMAIL = "default@mycookbook.app"
+
+@app.before_request
+def auto_login():
+    if current_user.is_authenticated:
+        return
+    # Skip static files
+    from flask import request as _req
+    if _req.path.startswith("/static"):
+        return
+    user = User.query.filter_by(email=_AUTO_LOGIN_EMAIL).first()
+    if not user:
+        user = User(email=_AUTO_LOGIN_EMAIL)
+        user.set_password("auto")
+        db.session.add(user)
+        db.session.commit()
+    login_user(user, remember=True)
+
+
+# ---------------------------------------------------------------------------
 # Helpers: Albert Heijn API  (server-level tokens, not per-user)
 # ---------------------------------------------------------------------------
 
