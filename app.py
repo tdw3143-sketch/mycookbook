@@ -158,9 +158,6 @@ _AUTO_LOGIN_EMAIL = "default@mycookbook.app"
 
 @app.before_request
 def auto_login():
-    if current_user.is_authenticated:
-        return
-    # Skip static files
     from flask import request as _req
     if _req.path.startswith("/static"):
         return
@@ -170,7 +167,9 @@ def auto_login():
         user.set_password("auto")
         db.session.add(user)
         db.session.commit()
-    login_user(user, remember=True)
+    # Always switch to the shared default account
+    if not current_user.is_authenticated or current_user.email != _AUTO_LOGIN_EMAIL:
+        login_user(user, remember=True)
 
 
 # ---------------------------------------------------------------------------
