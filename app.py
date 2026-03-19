@@ -728,7 +728,7 @@ def index():
 @app.route("/api/recipes", methods=["GET"])
 @login_required
 def get_recipes():
-    recipes = Recipe.query.filter_by(user_id=current_user.id).order_by(Recipe.created_at).all()
+    recipes = Recipe.query.order_by(Recipe.created_at).all()
     return jsonify([r.to_dict() for r in recipes])
 
 
@@ -773,7 +773,7 @@ def update_recipe(recipe_id):
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    recipe = Recipe.query.filter_by(id=recipe_id, user_id=current_user.id).first()
+    recipe = Recipe.query.filter_by(id=recipe_id).first()
     if not recipe:
         return jsonify({"error": "Recipe not found"}), 404
 
@@ -799,7 +799,7 @@ def update_recipe(recipe_id):
 @app.route("/api/recipes/<recipe_id>", methods=["DELETE"])
 @login_required
 def delete_recipe(recipe_id):
-    recipe = Recipe.query.filter_by(id=recipe_id, user_id=current_user.id).first()
+    recipe = Recipe.query.filter_by(id=recipe_id).first()
     if not recipe:
         return jsonify({"error": "Recipe not found"}), 404
     db.session.delete(recipe)
@@ -911,7 +911,7 @@ def import_from_json():
 @app.route("/api/plans", methods=["GET"])
 @login_required
 def get_plans():
-    plans = MealPlan.query.filter_by(user_id=current_user.id).order_by(MealPlan.created_at).all()
+    plans = MealPlan.query.order_by(MealPlan.created_at).all()
     return jsonify([p.to_dict() for p in plans])
 
 
@@ -935,7 +935,7 @@ def add_plan():
 @app.route("/api/plans/<plan_id>", methods=["DELETE"])
 @login_required
 def delete_plan(plan_id):
-    plan = MealPlan.query.filter_by(id=plan_id, user_id=current_user.id).first()
+    plan = MealPlan.query.filter_by(id=plan_id).first()
     if not plan:
         return jsonify({"error": "Plan not found"}), 404
     db.session.delete(plan)
