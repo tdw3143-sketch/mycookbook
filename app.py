@@ -169,6 +169,7 @@ def auto_login():
         db.session.commit()
     # Always switch to the shared default account
     if not current_user.is_authenticated or current_user.email != _AUTO_LOGIN_EMAIL:
+        logout_user()
         login_user(user, remember=True)
 
 
