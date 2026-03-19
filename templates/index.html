@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="MyCookbook">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
 
-  <link rel="stylesheet" href="/static/style.css?v=4">
+  <link rel="stylesheet" href="/static/style.css?v=5">
   <link rel="icon" href="/static/icons/icon-192.png">
 </head>
 <body>
@@ -38,7 +38,7 @@
   <!-- ======================================================
        Auth screen (shown when not logged in)
   ====================================================== -->
-  <div id="auth-screen" style="display:none">
+  <div id="auth-screen" style="display:none !important">
     <div class="auth-card">
       <div class="auth-logo">🍳 MyCookbook</div>
       <div class="auth-tabs">
@@ -64,7 +64,7 @@
   <!-- ======================================================
        Main content
   ====================================================== -->
-  <main class="main-content" id="app-root" style="display:none">
+  <main class="main-content" id="app-root">
 
     <!-- ==================== RECIPES VIEW ==================== -->
     <section class="view active" id="view-recipes">
@@ -455,6 +455,6 @@
   ====================================================== -->
   <div id="toast-container" aria-live="polite"></div>
 
-  <script src="/static/app.js?v=2"></script>
+  <script src="/static/app.js?v=5"></script>
 </body>
 </html>
