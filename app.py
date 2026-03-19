@@ -3,7 +3,7 @@ import os
 import re
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import anthropic
 import requests
@@ -41,7 +41,7 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["REMEMBER_COOKIE_SECURE"] = _is_prod
 app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
 app.config["REMEMBER_COOKIE_HTTPONLY"] = True
-app.config["REMEMBER_COOKIE_DURATION"] = 30 * 24 * 60 * 60  # 30 days
+app.config["REMEMBER_COOKIE_DURATION"] = timedelta(days=30)
 
 # Support SQLite locally and PostgreSQL on Railway
 _db_url = os.environ.get("DATABASE_URL", "")
