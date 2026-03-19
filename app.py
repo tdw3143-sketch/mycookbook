@@ -31,9 +31,17 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # ---------------------------------------------------------------------------
 
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-in-prod")
-app.config["SESSION_COOKIE_SECURE"] = True
+
+# In production (Railway) we're always on HTTPS; locally we're on HTTP.
+# Secure cookies only work over HTTPS, so tie the flag to whether we're in prod.
+_is_prod = bool(os.environ.get("DATABASE_URL"))
+app.config["SESSION_COOKIE_SECURE"] = _is_prod
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["REMEMBER_COOKIE_SECURE"] = _is_prod
+app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
+app.config["REMEMBER_COOKIE_HTTPONLY"] = True
+app.config["REMEMBER_COOKIE_DURATION"] = 30 * 24 * 60 * 60  # 30 days
 
 # Support SQLite locally and PostgreSQL on Railway
 _db_url = os.environ.get("DATABASE_URL", "")
