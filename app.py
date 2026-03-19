@@ -20,11 +20,20 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 
+# Railway (and most cloud hosts) terminate TLS at their edge proxy and forward
+# plain HTTP to the app. ProxyFix makes Flask trust the X-Forwarded-* headers
+# so sessions and secure cookies work correctly over HTTPS.
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-in-prod")
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
 
 # Support SQLite locally and PostgreSQL on Railway
 _db_url = os.environ.get("DATABASE_URL", "")
