@@ -173,12 +173,14 @@ a { color: var(--green); text-decoration: none; }
 .navbar {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: var(--nav-h);
+  height: calc(var(--nav-h) + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
   background: var(--white);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  padding: 0 24px;
   z-index: 100;
   gap: 32px;
 }
@@ -216,12 +218,11 @@ a { color: var(--green); text-decoration: none; }
    Layout
    ============================================================ */
 .main-content {
-  margin-top: var(--nav-h);
   padding: 32px 24px;
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
-  margin-top: calc(var(--nav-h) + 32px);
+  margin-top: calc(var(--nav-h) + env(safe-area-inset-top) + 32px);
 }
 
 .view { display: none; }
@@ -948,7 +949,7 @@ a { color: var(--green); text-decoration: none; }
   padding: 20px;
   box-shadow: var(--shadow-sm);
   position: sticky;
-  top: calc(var(--nav-h) + 20px);
+  top: calc(var(--nav-h) + env(safe-area-inset-top) + 20px);
 }
 
 .mealplan-sidebar h3 { font-size: 1rem; margin-bottom: 16px; }
@@ -1136,7 +1137,7 @@ a { color: var(--green); text-decoration: none; }
   padding: 20px;
   box-shadow: var(--shadow-sm);
   position: sticky;
-  top: calc(var(--nav-h) + 20px);
+  top: calc(var(--nav-h) + env(safe-area-inset-top) + 20px);
 }
 
 .shopping-controls h3 { font-size: 1rem; margin-bottom: 16px; }
