@@ -198,7 +198,8 @@ a { color: var(--green); text-decoration: none; }
   letter-spacing: -.3px;
 }
 
-.navbar-brand span { color: var(--green); }
+.navbar-brand .brand-accent { color: var(--green); }
+.nav-links a { white-space: nowrap; }
 
 .nav-links {
   display: flex;
@@ -1265,11 +1266,12 @@ a { color: var(--green); text-decoration: none; }
 }
 
 @media (max-width: 600px) {
-  .navbar-row { padding: 0 12px; gap: 8px; }
-  .navbar-brand { font-size: 1rem; }
+  .navbar-row { padding: 0 10px; gap: 6px; }
+  .navbar-brand { font-size: 1.1rem; flex-shrink: 0; }
+  .brand-text { display: none; }  /* show only emoji on small screens */
   .nav-links { gap: 2px; }
-  .nav-links a { padding: 5px 7px; font-size: .78rem; }
-  .btn-logout { padding: 5px 8px; font-size: .78rem; }
+  .nav-links a { padding: 6px 9px; font-size: .82rem; }
+  .btn-logout { padding: 5px 8px; font-size: .78rem; flex-shrink: 0; }
   .main-content { padding: 20px 12px; }
   .import-section { padding: 24px 16px; }
   .import-row { flex-direction: column; }
