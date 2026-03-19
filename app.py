@@ -235,9 +235,18 @@ HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
+        "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Accept-Language": "en-US,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9,nl;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
 }
 
 EMPTY_RECIPE = {
@@ -594,9 +603,18 @@ def scrape_recipe(url):
     if is_youtube_url(url):
         return handle_youtube(url)
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15, allow_redirects=True)
+        session = requests.Session()
+        session.headers.update(HEADERS)
+        resp = session.get(url, timeout=15, allow_redirects=True)
         resp.raise_for_status()
     except requests.RequestException as exc:
+        err = str(exc)
+        if "403" in err or "401" in err or "blocked" in err.lower():
+            return {"error": (
+                "This website is blocking imports. Try copying the recipe URL "
+                "from your phone's browser instead, or take a photo of the recipe "
+                "and use the 📷 Photo button."
+            )}
         return {"error": f"Could not fetch URL: {exc}"}
     soup = BeautifulSoup(resp.text, "html.parser")
     recipe = extract_from_json_ld(soup, url)
