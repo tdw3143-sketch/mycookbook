@@ -1207,6 +1207,9 @@ async function init() {
   await loadApp();
   initSearchFilter();
 
+  // Home button
+  $("home-btn").addEventListener("click", () => showView("recipes"));
+
   // Nav
   document.querySelectorAll(".nav-links a").forEach(a => {
     a.addEventListener("click", e => {
