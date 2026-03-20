@@ -60,6 +60,7 @@ class Recipe(db.Model):
     nutrition    = db.Column(db.JSON,         default=dict)
     source_url   = db.Column(db.Text,         default="")
     tags         = db.Column(db.JSON,         default=list)
+    favourite    = db.Column(db.Boolean,      default=False, nullable=False, server_default="0")
     created_at   = db.Column(db.DateTime,     default=datetime.utcnow)
     updated_at   = db.Column(db.DateTime,     nullable=True)
 
@@ -77,6 +78,7 @@ class Recipe(db.Model):
             "nutrition":    self.nutrition or {},
             "source_url":   self.source_url or "",
             "tags":         self.tags or [],
+            "favourite":    bool(self.favourite),
             "created_at":   self.created_at.isoformat() + "Z" if self.created_at else "",
             "updated_at":   self.updated_at.isoformat() + "Z" if self.updated_at else None,
         }
@@ -665,6 +667,7 @@ def update_recipe(recipe_id):
     if "nutrition"   in data: recipe.nutrition    = data["nutrition"]
     if "source_url"  in data: recipe.source_url   = data["source_url"]
     if "tags"        in data: recipe.tags         = data["tags"]
+    if "favourite"   in data: recipe.favourite    = bool(data["favourite"])
     if "ingredients"  in data:
         recipe.ingredients  = [convert_units(i) for i in (data["ingredients"] or [])]
     if "instructions" in data:

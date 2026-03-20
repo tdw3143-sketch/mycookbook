@@ -1,6 +1,6 @@
 /* MyCookbook — Service Worker */
 
-const CACHE = "mycookbook-v7";
+const CACHE = "mycookbook-v9";
 
 // App shell files to cache on install
 const SHELL = [

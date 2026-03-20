@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-title" content="MyCookbook">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
 
-  <link rel="stylesheet" href="/static/style.css?v=7">
+  <link rel="stylesheet" href="/static/style.css?v=9">
   <link rel="icon" href="/static/icons/icon-192.png">
 </head>
 <body>
@@ -60,6 +60,9 @@
           <button class="btn btn-secondary btn-lg" id="import-photo-btn">
             📷 Photo
           </button>
+          <button class="btn btn-secondary btn-lg" id="create-btn">
+            ✍️ Create
+          </button>
           <input type="file" id="import-image-input" accept="image/*" style="display:none">
         </div>
         <div id="import-spinner" class="spinner-wrap hidden" style="margin-top:16px">
@@ -80,6 +83,7 @@
         <!-- Tag filter chips -->
         <div class="tag-chips" id="tag-chips">
           <button class="tag-chip active" data-tag="All">All</button>
+  <button class="tag-chip" data-tag="Favourites">❤️ Favourites</button>
           <button class="tag-chip" data-tag="Vegetarian">Vegetarian</button>
           <button class="tag-chip" data-tag="Vegan">Vegan</button>
           <button class="tag-chip" data-tag="Quick">Quick (&lt;30min)</button>
@@ -165,37 +169,12 @@
 
         <!-- Controls sidebar -->
         <aside class="shopping-controls">
-          <h3>Store</h3>
-          <div class="store-toggle">
-            <input type="radio" name="store" id="store-ah" value="Albert Heijn" checked>
-            <label for="store-ah">Albert Heijn</label>
-            <input type="radio" name="store" id="store-lidl" value="Lidl">
-            <label for="store-lidl">Lidl</label>
-          </div>
-
-          <!-- AH authentication section (shown only when AH is selected) -->
-          <div id="ah-auth-section" style="display:none;margin-top:14px">
-            <div id="ah-status-disconnected">
-              <button class="btn btn-secondary" style="width:100%" id="ah-connect-btn">
-                🔗 Connect Albert Heijn
-              </button>
-            </div>
-            <div id="ah-status-connected" style="display:none">
-              <div class="ah-connected-badge">✓ Albert Heijn connected</div>
-              <button class="btn btn-secondary btn-sm" id="ah-disconnect-btn" style="width:100%;margin-top:6px">
-                Disconnect
-              </button>
-            </div>
-            <button class="btn btn-primary" style="width:100%;margin-top:10px" id="ah-send-btn" disabled>
-              🛒 Send to AH app
-            </button>
-          </div>
 
           <button class="btn btn-primary" style="width:100%;margin-top:14px;margin-bottom:8px" onclick="renderShoppingList()">
             ↻ Refresh List
           </button>
-          <button class="btn btn-secondary" style="width:100%" onclick="window.print()">
-            🖨️ Print
+          <button class="btn btn-secondary" style="width:100%" id="share-list-btn">
+            📤 Share List
           </button>
         </aside>
       </div>
@@ -238,7 +217,8 @@
           </div>
 
           <div class="modal-footer">
-            <button class="btn btn-primary" id="add-to-mealplan-btn">📅 Add to Meal Plan</button>
+            <button class="btn btn-primary" id="cook-mode-btn">👨‍🍳 Cook</button>
+            <button class="btn btn-secondary" id="add-to-mealplan-btn">📅 Add to Meal Plan</button>
             <span class="source-link hidden" id="modal-source"></span>
           </div>
         </div>
@@ -376,50 +356,24 @@
     </div>
   </div>
 
+
   <!-- ======================================================
-       Albert Heijn Connect Modal
+       Cook Mode Overlay
   ====================================================== -->
-  <div class="modal-backdrop" id="ah-connect-modal" role="dialog" aria-modal="true">
-    <div class="modal" style="max-width:500px">
-      <button class="modal-close" id="ah-modal-close" aria-label="Close">✕</button>
-      <div class="modal-body" style="padding-top:52px">
-        <h2 style="margin-bottom:6px;font-size:1.15rem">Connect Albert Heijn</h2>
-        <p style="color:var(--text-muted);font-size:.88rem;margin-bottom:20px">
-          Follow these steps to link your AH account.
-        </p>
-        <ol class="ah-steps">
-          <li>Click <strong>Open AH Login</strong> below — a new tab will open.</li>
-          <li>Log in with your Albert Heijn account.</li>
-          <li>After logging in your browser will show an error page. That's expected. <strong>Copy the full URL</strong> from the address bar (it starts with <code>appie://</code>).</li>
-          <li>Paste it in the field below and click <strong>Connect</strong>.</li>
-        </ol>
-
-        <a
-          href="https://login.ah.nl/secure/oauth/authorize?client_id=appie-ios&response_type=code&redirect_uri=appie%3A%2F%2Flogin-exit"
-          target="_blank"
-          rel="noopener"
-          class="btn btn-secondary"
-          style="display:inline-block;margin-bottom:20px"
-        >↗ Open AH Login</a>
-
-        <div class="edit-field-group">
-          <label class="edit-label" for="ah-code-input">Paste the address-bar URL here</label>
-          <input
-            type="text"
-            id="ah-code-input"
-            class="edit-input"
-            placeholder="appie://login-exit?code=..."
-            autocomplete="off"
-            spellcheck="false"
-          >
-        </div>
-        <p id="ah-connect-error" style="color:var(--danger,#e53935);font-size:.85rem;margin-top:6px;display:none"></p>
-
-        <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px">
-          <button class="btn btn-secondary" id="ah-modal-cancel">Cancel</button>
-          <button class="btn btn-primary" id="ah-modal-connect-btn">Connect</button>
-        </div>
-      </div>
+  <div id="cook-mode" class="cook-mode-overlay hidden">
+    <div class="cook-mode-header">
+      <button class="cook-close-btn" id="cook-close-btn">✕</button>
+      <span id="cook-title" class="cook-title-text"></span>
+      <span id="cook-progress" class="cook-progress-text"></span>
+    </div>
+    <div class="cook-mode-body">
+      <div id="cook-step-number" class="cook-step-number"></div>
+      <div id="cook-step-text" class="cook-step-text"></div>
+      <div id="cook-timer-area" class="cook-timer-area"></div>
+    </div>
+    <div class="cook-mode-nav">
+      <button class="btn btn-secondary cook-nav-btn" id="cook-prev-btn">← Prev</button>
+      <button class="btn btn-primary cook-nav-btn" id="cook-next-btn">Next →</button>
     </div>
   </div>
 
@@ -428,6 +382,6 @@
   ====================================================== -->
   <div id="toast-container" aria-live="polite"></div>
 
-  <script src="/static/app.js?v=7"></script>
+  <script src="/static/app.js?v=9"></script>
 </body>
 </html>

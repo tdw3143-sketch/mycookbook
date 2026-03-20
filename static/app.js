@@ -208,7 +208,9 @@ function getFilteredRecipes() {
   }
 
   // Tag filter
-  if (state.activeTag && state.activeTag !== "All") {
+  if (state.activeTag === "Favourites") {
+    list = list.filter(r => r.favourite);
+  } else if (state.activeTag && state.activeTag !== "All") {
     list = list.filter(r => (r.tags || []).includes(state.activeTag));
   }
 
@@ -270,6 +272,10 @@ function renderRecipes() {
       if (e.target.closest(".card-action-btn")) return;
       openModal(id);
     });
+    card.querySelector(".card-action-btn.fav").addEventListener("click", e => {
+      e.stopPropagation();
+      toggleFavourite(id);
+    });
     card.querySelector(".card-action-btn.delete").addEventListener("click", e => {
       e.stopPropagation();
       deleteRecipe(id);
@@ -295,6 +301,7 @@ function cardHTML(r) {
     <div class="recipe-card" data-id="${r.id}">
       <div class="card-img-wrap">${imgEl}</div>
       <div class="card-actions">
+        <button class="card-action-btn fav${r.favourite ? " active" : ""}" title="Favourite">♥</button>
         <button class="card-action-btn delete" title="Delete recipe">🗑️</button>
       </div>
       <div class="card-body">
@@ -1039,149 +1046,195 @@ function renderShoppingList() {
   $("copy-list-btn").addEventListener("click", copyShoppingList);
 }
 
+function buildShoppingListText() {
+  const sections = document.querySelectorAll(".category-section");
+  const lines = ["🛒 Shopping List", ""];
+  sections.forEach(sec => {
+    const title = sec.querySelector(".category-title")?.textContent;
+    const items = Array.from(sec.querySelectorAll(".shopping-item label")).map(l => "• " + l.textContent);
+    if (items.length) {
+      lines.push(title.toUpperCase());
+      lines.push(...items);
+      lines.push("");
+    }
+  });
+  return lines.join("\n").trim();
+}
+
 function copyShoppingList() {
-  const items = Array.from(document.querySelectorAll(".shopping-item label")).map(l => "• " + l.textContent);
-  navigator.clipboard.writeText(items.join("\n")).then(() => toast("Copied to clipboard!")).catch(() => toast("Copy failed", "error"));
+  const text = buildShoppingListText();
+  navigator.clipboard.writeText(text)
+    .then(() => toast("Copied to clipboard!"))
+    .catch(() => toast("Copy failed", "error"));
+}
+
+async function shareShoppingList() {
+  const text = buildShoppingListText();
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: "Shopping List", text });
+    } catch (e) {
+      if (e.name !== "AbortError") toast("Share failed", "error");
+    }
+  } else {
+    // Fallback: copy to clipboard
+    navigator.clipboard.writeText(text)
+      .then(() => toast("Copied to clipboard!"))
+      .catch(() => toast("Copy failed", "error"));
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Store toggle & Albert Heijn integration
+// Store toggle
 // ---------------------------------------------------------------------------
 
 function initStoreToggle() {
   const radios = document.querySelectorAll(".store-toggle input");
-
-  // Restore saved selection
   radios.forEach(r => { r.checked = r.value === state.store; });
-  updateAhAuthSection();
-
   radios.forEach(radio => {
     radio.addEventListener("change", () => {
       state.store = radio.value;
       localStorage.setItem("store", state.store);
-      updateAhAuthSection();
     });
   });
 }
 
-function updateAhAuthSection() {
-  const section = $("ah-auth-section");
-  if (state.store === "Albert Heijn") {
-    section.style.display = "";
-    renderAhStatus();
-  } else {
-    section.style.display = "none";
-  }
+
+
+// ---------------------------------------------------------------------------
+// Favourites
+// ---------------------------------------------------------------------------
+async function toggleFavourite(id) {
+  const recipe = state.recipes.find(r => r.id === id);
+  if (!recipe) return;
+  const updated = await apiUpdateRecipe(id, { favourite: !recipe.favourite });
+  const idx = state.recipes.findIndex(r => r.id === id);
+  if (idx !== -1) state.recipes[idx] = updated;
+  if (state.currentRecipe?.id === id) state.currentRecipe = updated;
+  renderRecipes();
 }
 
-function renderAhStatus() {
-  $("ah-status-disconnected").style.display = state.ahAuthenticated ? "none" : "";
-  $("ah-status-connected").style.display   = state.ahAuthenticated ? "" : "none";
-  $("ah-send-btn").disabled = !state.ahAuthenticated;
+// ---------------------------------------------------------------------------
+// Create from scratch
+// ---------------------------------------------------------------------------
+function openCreateModal() {
+  openPreviewModal({
+    title: "", description: "", image: "", ingredients: [], instructions: [],
+    prepTime: "", cookTime: "", servings: null, tags: [], source_url: "",
+  });
 }
 
-function openAhConnectModal() {
-  $("ah-code-input").value = "";
-  $("ah-connect-error").style.display = "none";
-  $("ah-connect-modal").classList.add("open");
+// ---------------------------------------------------------------------------
+// Cook Mode
+// ---------------------------------------------------------------------------
+const cookState = { recipe: null, step: 0, wakeLock: null, timers: {} };
+
+function openCookMode(recipe) {
+  if (!recipe.instructions?.length) { toast("No instructions to cook through.", "error"); return; }
+  cookState.recipe = recipe;
+  cookState.step = 0;
+  cookState.timers = {};
+  $("cook-title").textContent = recipe.title;
+  showCookStep(0);
+  $("cook-mode").classList.remove("hidden");
   document.body.style.overflow = "hidden";
+  if ("wakeLock" in navigator) {
+    navigator.wakeLock.request("screen").then(wl => { cookState.wakeLock = wl; }).catch(() => {});
+  }
 }
 
-function closeAhConnectModal() {
-  $("ah-connect-modal").classList.remove("open");
+function closeCookMode() {
+  $("cook-mode").classList.add("hidden");
   document.body.style.overflow = "";
+  if (cookState.wakeLock) { cookState.wakeLock.release(); cookState.wakeLock = null; }
+  Object.values(cookState.timers).forEach(t => { if (t.interval) clearInterval(t.interval); });
+  cookState.timers = {};
 }
 
-async function handleAhConnect() {
-  const btn = $("ah-modal-connect-btn");
-  const errorEl = $("ah-connect-error");
-  const raw = $("ah-code-input").value.trim();
-
-  if (!raw) {
-    errorEl.textContent = "Please paste the URL from the address bar.";
-    errorEl.style.display = "";
-    return;
-  }
-
-  btn.disabled = true;
-  errorEl.style.display = "none";
-
-  try {
-    const { status, data } = await apiAhConnect(raw);
-    if (!data.ok) {
-      errorEl.textContent = data.error || "Connection failed. Check the URL and try again.";
-      errorEl.style.display = "";
-      return;
-    }
-    state.ahAuthenticated = true;
-    renderAhStatus();
-    closeAhConnectModal();
-    toast("Albert Heijn connected!", "success");
-  } catch (err) {
-    errorEl.textContent = "Connection failed. Please try again.";
-    errorEl.style.display = "";
-  } finally {
-    btn.disabled = false;
-  }
+function showCookStep(index) {
+  const steps = cookState.recipe.instructions || [];
+  const total = steps.length;
+  cookState.step = index;
+  $("cook-progress").textContent = `${index + 1} / ${total}`;
+  $("cook-step-number").textContent = `Step ${index + 1}`;
+  $("cook-step-text").textContent = steps[index];
+  renderCookTimers(steps[index], index);
+  $("cook-prev-btn").disabled = index === 0;
+  $("cook-next-btn").textContent = index === total - 1 ? "Done ✓" : "Next →";
 }
 
-async function handleAhDisconnect() {
-  try {
-    await apiAhDisconnect();
-    state.ahAuthenticated = false;
-    renderAhStatus();
-    toast("Albert Heijn disconnected");
-  } catch (err) {
-    toast("Disconnect failed", "error");
-  }
-}
-
-async function handleSendToAh() {
-  const btn = $("ah-send-btn");
-  btn.disabled = true;
-
-  // Collect all ingredient texts from the current meal plan (same logic as renderShoppingList)
-  const allIds = Object.values(state.mealPlan).flat();
+// ---------------------------------------------------------------------------
+// Cook Mode Timers
+// ---------------------------------------------------------------------------
+function parseTimers(text) {
+  const results = [];
   const seen = new Set();
-  const items = [];
-
-  for (const rid of allIds) {
-    if (seen.has(rid)) continue;
-    seen.add(rid);
-    const recipe = state.recipes.find(r => r.id === rid);
-    if (!recipe) continue;
-    const ratio = state.people / (recipe.servings || 1);
-    for (const ing of recipe.ingredients || []) {
-      items.push(scaleIngredient(ing, ratio));
+  const patterns = [
+    { re: /(\d+)\s*h(?:ou?r?s?)?\s*(?:and\s*)?(\d+)\s*min(?:ute)?s?/gi, secs: m => +m[1]*3600 + +m[2]*60, label: m => `${m[1]}h ${m[2]}m` },
+    { re: /(\d+)\s*h(?:ou?r?s?)?/gi,    secs: m => +m[1]*3600, label: m => `${m[1]}h` },
+    { re: /(\d+)\s*min(?:ute)?s?/gi,    secs: m => +m[1]*60,   label: m => `${m[1]} min` },
+    { re: /(\d+)\s*sec(?:ond)?s?/gi,    secs: m => +m[1],      label: m => `${m[1]}s` },
+  ];
+  for (const { re, secs, label } of patterns) {
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const s = secs(m);
+      if (s > 0 && !seen.has(m[0].toLowerCase())) {
+        seen.add(m[0].toLowerCase());
+        results.push({ seconds: s, label: label(m) });
+      }
     }
   }
-
-  if (!items.length) {
-    toast("No ingredients to send — add recipes to your meal plan first.", "error");
-    btn.disabled = false;
-    return;
-  }
-
-  try {
-    const { status, data } = await apiAhSendList(items);
-    if (status === 401) {
-      state.ahAuthenticated = false;
-      renderAhStatus();
-      toast("AH session expired — please reconnect.", "error");
-      return;
-    }
-    if (!data.ok) {
-      toast(`AH error: ${data.error}`, "error");
-      return;
-    }
-    toast(`${data.count} item${data.count !== 1 ? "s" : ""} sent to Albert Heijn!`, "success");
-  } catch (err) {
-    toast("Failed to send to Albert Heijn", "error");
-  } finally {
-    btn.disabled = !state.ahAuthenticated;
-  }
+  return results;
 }
 
+function formatTime(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+function renderCookTimers(stepText, stepIndex) {
+  const area = $("cook-timer-area");
+  const durations = parseTimers(stepText);
+  if (!durations.length) { area.innerHTML = ""; return; }
+  area.innerHTML = durations.map((d, i) => {
+    const key = `${stepIndex}-${i}`;
+    const t = cookState.timers[key];
+    if (t && t.running) {
+      return `<div class="cook-timer running">
+        <span class="cook-timer-display">⏱ ${formatTime(t.remaining)}</span>
+        <button class="cook-timer-stop" onclick="stopCookTimer('${key}')">■ Stop</button>
+      </div>`;
+    }
+    return `<button class="cook-timer-start" onclick="startCookTimer('${key}',${d.seconds},'${escHtml(d.label)}')">⏱ Start ${d.label} timer</button>`;
+  }).join("");
+}
+
+function startCookTimer(key, seconds, label) {
+  if (cookState.timers[key]?.interval) clearInterval(cookState.timers[key].interval);
+  cookState.timers[key] = { running: true, remaining: seconds, label, interval: null };
+  cookState.timers[key].interval = setInterval(() => {
+    cookState.timers[key].remaining--;
+    if (cookState.timers[key].remaining <= 0) {
+      clearInterval(cookState.timers[key].interval);
+      cookState.timers[key].running = false;
+      toast(`⏱ Timer done: ${label}`, "success");
+    }
+    const stepIndex = parseInt(key.split("-")[0], 10);
+    if (cookState.step === stepIndex) renderCookTimers(cookState.recipe.instructions[stepIndex], stepIndex);
+  }, 1000);
+  renderCookTimers(cookState.recipe.instructions[cookState.step], cookState.step);
+}
+
+function stopCookTimer(key) {
+  if (cookState.timers[key]?.interval) clearInterval(cookState.timers[key].interval);
+  if (cookState.timers[key]) cookState.timers[key].running = false;
+  const stepIndex = parseInt(key.split("-")[0], 10);
+  renderCookTimers(cookState.recipe.instructions[stepIndex], stepIndex);
+}
 
 async function loadApp() {
   try {
@@ -1292,29 +1345,21 @@ async function init() {
     renderSavedWeeks();
   });
 
-  // Store toggle
-  initStoreToggle();
+  // Share list button
+  $("share-list-btn").addEventListener("click", shareShoppingList);
 
-  // AH connect modal
-  $("ah-connect-btn").addEventListener("click", openAhConnectModal);
-  $("ah-modal-close").addEventListener("click", closeAhConnectModal);
-  $("ah-modal-cancel").addEventListener("click", closeAhConnectModal);
-  $("ah-connect-modal").addEventListener("click", e => {
-    if (e.target === e.currentTarget) closeAhConnectModal();
+  // Create from scratch
+  $("create-btn").addEventListener("click", openCreateModal);
+
+  // Cook mode
+  $("cook-mode-btn").addEventListener("click", () => openCookMode(state.currentRecipe));
+  $("cook-close-btn").addEventListener("click", closeCookMode);
+  $("cook-prev-btn").addEventListener("click", () => showCookStep(cookState.step - 1));
+  $("cook-next-btn").addEventListener("click", () => {
+    const total = cookState.recipe?.instructions?.length || 0;
+    if (cookState.step >= total - 1) closeCookMode();
+    else showCookStep(cookState.step + 1);
   });
-  $("ah-modal-connect-btn").addEventListener("click", handleAhConnect);
-  $("ah-code-input").addEventListener("keydown", e => { if (e.key === "Enter") handleAhConnect(); });
-  $("ah-disconnect-btn").addEventListener("click", handleAhDisconnect);
-  $("ah-send-btn").addEventListener("click", handleSendToAh);
-
-  // Init AH status
-  try {
-    const s = await apiAhStatus();
-    state.ahAuthenticated = s.authenticated;
-  } catch (e) {
-    state.ahAuthenticated = false;
-  }
-  renderAhStatus();
 }
 
 document.addEventListener("DOMContentLoaded", init);
