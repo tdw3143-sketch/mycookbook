@@ -3,7 +3,7 @@ import os
 import re
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import anthropic
 import requests
@@ -12,11 +12,7 @@ load_dotenv()
 from bs4 import BeautifulSoup
 from flask import Flask, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import (
-    LoginManager, UserMixin,
-    login_user, logout_user, login_required, current_user,
-)
-from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import text
 
 app = Flask(__name__)
 
@@ -29,19 +25,6 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-in-prod")
-
-# In production (Railway) we're always on HTTPS; locally we're on HTTP.
-# Secure cookies only work over HTTPS, so tie the flag to whether we're in prod.
-_is_prod = bool(os.environ.get("DATABASE_URL"))
-app.config["SESSION_COOKIE_SECURE"] = _is_prod
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["REMEMBER_COOKIE_SECURE"] = _is_prod
-app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
-app.config["REMEMBER_COOKIE_HTTPONLY"] = True
-app.config["REMEMBER_COOKIE_DURATION"] = timedelta(days=30)
 
 # Support SQLite locally and PostgreSQL on Railway
 _db_url = os.environ.get("DATABASE_URL", "")
@@ -57,38 +40,15 @@ app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
-login_manager = LoginManager(app)
-
-
-@login_manager.unauthorized_handler
-def unauthorized():
-    return jsonify({"error": "Not authenticated"}), 401
 
 
 # ---------------------------------------------------------------------------
 # Database models
 # ---------------------------------------------------------------------------
 
-class User(UserMixin, db.Model):
-    __tablename__ = "users"
-    id            = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    email         = db.Column(db.String(255), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-    recipes       = db.relationship("Recipe",  backref="user", lazy=True, cascade="all, delete-orphan")
-    plans         = db.relationship("MealPlan", backref="user", lazy=True, cascade="all, delete-orphan")
-
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-
-
 class Recipe(db.Model):
     __tablename__ = "recipes"
     id           = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id      = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
     title        = db.Column(db.String(500),  default="")
     description  = db.Column(db.Text,         default="")
     image        = db.Column(db.Text,         default="")
@@ -125,7 +85,6 @@ class Recipe(db.Model):
 class MealPlan(db.Model):
     __tablename__ = "meal_plans"
     id         = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id    = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False)
     name       = db.Column(db.String(500), default="Untitled Week")
     plan       = db.Column(db.JSON,        default=dict)
     people     = db.Column(db.Integer,     default=2)
@@ -141,36 +100,16 @@ class MealPlan(db.Model):
         }
 
 
-@login_manager.user_loader
-def load_user(user_id):
-    return db.session.get(User, user_id)
-
-
-# Create tables on first run
+# Create tables on first run, and migrate away from user_id columns if needed
 with app.app_context():
     db.create_all()
-
-
-# ---------------------------------------------------------------------------
-# Auto-login: bypass auth for now — remove this block to re-enable accounts
-# ---------------------------------------------------------------------------
-_AUTO_LOGIN_EMAIL = "default@mycookbook.app"
-
-@app.before_request
-def auto_login():
-    from flask import request as _req
-    if _req.path.startswith("/static"):
-        return
-    user = User.query.filter_by(email=_AUTO_LOGIN_EMAIL).first()
-    if not user:
-        user = User(email=_AUTO_LOGIN_EMAIL)
-        user.set_password("auto")
-        db.session.add(user)
-        db.session.commit()
-    # Always switch to the shared default account
-    if not current_user.is_authenticated or current_user.email != _AUTO_LOGIN_EMAIL:
-        logout_user()
-        login_user(user, remember=True)
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE recipes DROP COLUMN IF EXISTS user_id"))
+            conn.execute(text("ALTER TABLE meal_plans DROP COLUMN IF EXISTS user_id"))
+            conn.commit()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -657,62 +596,6 @@ def scrape_recipe(url):
 
 
 # ---------------------------------------------------------------------------
-# Auth routes
-# ---------------------------------------------------------------------------
-
-@app.route("/auth/me")
-def auth_me():
-    if current_user.is_authenticated:
-        return jsonify({"authenticated": True, "email": current_user.email})
-    return jsonify({"authenticated": False})
-
-
-@app.route("/auth/register", methods=["POST"])
-def auth_register():
-    data = request.get_json(force=True) or {}
-    email    = (data.get("email") or "").strip().lower()
-    password = (data.get("password") or "").strip()
-
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
-    if len(password) < 6:
-        return jsonify({"error": "Password must be at least 6 characters"}), 400
-    if User.query.filter_by(email=email).first():
-        return jsonify({"error": "An account with this email already exists"}), 409
-
-    user = User(email=email)
-    user.set_password(password)
-    db.session.add(user)
-    db.session.commit()
-    login_user(user, remember=True)
-    return jsonify({"ok": True, "email": user.email}), 201
-
-
-@app.route("/auth/login", methods=["POST"])
-def auth_login():
-    data = request.get_json(force=True) or {}
-    email    = (data.get("email") or "").strip().lower()
-    password = (data.get("password") or "").strip()
-
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
-
-    user = User.query.filter_by(email=email).first()
-    if not user or not user.check_password(password):
-        return jsonify({"error": "Incorrect email or password"}), 401
-
-    login_user(user, remember=True)
-    return jsonify({"ok": True, "email": user.email})
-
-
-@app.route("/auth/logout", methods=["POST"])
-@login_required
-def auth_logout():
-    logout_user()
-    return jsonify({"ok": True})
-
-
-# ---------------------------------------------------------------------------
 # Routes: index
 # ---------------------------------------------------------------------------
 
@@ -726,14 +609,12 @@ def index():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/recipes", methods=["GET"])
-@login_required
 def get_recipes():
     recipes = Recipe.query.order_by(Recipe.created_at).all()
     return jsonify([r.to_dict() for r in recipes])
 
 
 @app.route("/api/recipes", methods=["POST"])
-@login_required
 def add_recipe():
     data = request.get_json(force=True)
     if not data:
@@ -741,12 +622,11 @@ def add_recipe():
 
     source_url = (data.get("source_url") or "").strip()
     if source_url:
-        existing = Recipe.query.filter_by(user_id=current_user.id, source_url=source_url).first()
+        existing = Recipe.query.filter_by(source_url=source_url).first()
         if existing:
             return jsonify({"duplicate": True, "existing": existing.to_dict()}), 409
 
     recipe = Recipe(
-        user_id      = current_user.id,
         title        = data.get("title", "Untitled Recipe"),
         description  = data.get("description", ""),
         image        = data.get("image", ""),
@@ -767,7 +647,6 @@ def add_recipe():
 
 
 @app.route("/api/recipes/<recipe_id>", methods=["PUT", "PATCH"])
-@login_required
 def update_recipe(recipe_id):
     data = request.get_json(force=True)
     if not data:
@@ -797,7 +676,6 @@ def update_recipe(recipe_id):
 
 
 @app.route("/api/recipes/<recipe_id>", methods=["DELETE"])
-@login_required
 def delete_recipe(recipe_id):
     recipe = Recipe.query.filter_by(id=recipe_id).first()
     if not recipe:
@@ -808,7 +686,6 @@ def delete_recipe(recipe_id):
 
 
 @app.route("/api/import", methods=["POST"])
-@login_required
 def import_recipe():
     data = request.get_json(force=True)
     if not data or not data.get("url"):
@@ -820,7 +697,6 @@ def import_recipe():
 
 
 @app.route("/api/import/image", methods=["POST"])
-@login_required
 def import_recipe_from_image():
     data = request.get_json(force=True) or {}
     image_b64  = data.get("image")
@@ -866,7 +742,6 @@ def import_recipe_from_image():
 
 
 @app.route("/api/import/json", methods=["POST"])
-@login_required
 def import_from_json():
     """One-time migration: import recipes from an uploaded recipes.json file."""
     data = request.get_json(force=True) or {}
@@ -880,11 +755,10 @@ def import_from_json():
         if not isinstance(r, dict):
             continue
         source_url = (r.get("source_url") or "").strip()
-        if source_url and Recipe.query.filter_by(user_id=current_user.id, source_url=source_url).first():
+        if source_url and Recipe.query.filter_by(source_url=source_url).first():
             skipped += 1
             continue
         recipe = Recipe(
-            user_id      = current_user.id,
             title        = r.get("title", "Untitled Recipe"),
             description  = r.get("description", ""),
             image        = r.get("image", ""),
@@ -909,20 +783,17 @@ def import_from_json():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/plans", methods=["GET"])
-@login_required
 def get_plans():
     plans = MealPlan.query.order_by(MealPlan.created_at).all()
     return jsonify([p.to_dict() for p in plans])
 
 
 @app.route("/api/plans", methods=["POST"])
-@login_required
 def add_plan():
     data = request.get_json(force=True)
     if not data:
         return jsonify({"error": "No data provided"}), 400
     plan = MealPlan(
-        user_id = current_user.id,
         name    = data.get("name", "Untitled Week"),
         plan    = data.get("plan", {}),
         people  = data.get("people", 2),
@@ -933,7 +804,6 @@ def add_plan():
 
 
 @app.route("/api/plans/<plan_id>", methods=["DELETE"])
-@login_required
 def delete_plan(plan_id):
     plan = MealPlan.query.filter_by(id=plan_id).first()
     if not plan:
@@ -948,14 +818,12 @@ def delete_plan(plan_id):
 # ---------------------------------------------------------------------------
 
 @app.route("/api/ah/status", methods=["GET"])
-@login_required
 def ah_status():
     tokens = load_ah_tokens()
     return jsonify({"authenticated": tokens is not None})
 
 
 @app.route("/api/ah/connect", methods=["POST"])
-@login_required
 def ah_connect():
     data = request.get_json(force=True) or {}
     raw = (data.get("code") or "").strip()
@@ -982,7 +850,6 @@ def ah_connect():
 
 
 @app.route("/api/ah/disconnect", methods=["DELETE"])
-@login_required
 def ah_disconnect():
     if os.path.exists(AH_TOKENS_FILE):
         os.remove(AH_TOKENS_FILE)
@@ -990,7 +857,6 @@ def ah_disconnect():
 
 
 @app.route("/api/ah/shopping-list", methods=["POST"])
-@login_required
 def ah_push_shopping_list():
     tokens = get_valid_ah_tokens()
     if not tokens:

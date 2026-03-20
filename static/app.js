@@ -1182,87 +1182,6 @@ async function handleSendToAh() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-async function authMe() {
-  const r = await fetch("/auth/me");
-  return r.json();
-}
-
-async function authLogin(email, password) {
-  const r = await fetch("/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  return r.json();
-}
-
-async function authRegister(email, password) {
-  const r = await fetch("/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  return r.json();
-}
-
-async function authLogout() {
-  await fetch("/auth/logout", { method: "POST" });
-}
-
-function showAuthScreen() {
-  $("auth-screen").style.display = "";
-  $("app-root").style.display    = "none";
-  $("logout-btn").style.display  = "none";
-  // Reset form
-  $("auth-email").value    = "";
-  $("auth-password").value = "";
-  $("auth-error").style.display = "none";
-}
-
-function showAppScreen() {
-  $("auth-screen").style.display = "none";
-  $("app-root").style.display    = "";
-  $("logout-btn").style.display  = "";
-}
-
-async function handleAuthSubmit(e) {
-  e.preventDefault();
-  const isRegister = document.querySelector(".auth-tab.active").dataset.tab === "register";
-  const email      = $("auth-email").value.trim();
-  const password   = $("auth-password").value;
-  const btn        = $("auth-submit-btn");
-  const errEl      = $("auth-error");
-
-  btn.disabled    = true;
-  btn.textContent = isRegister ? "Creating account…" : "Signing in…";
-  errEl.style.display = "none";
-
-  try {
-    const data = isRegister ? await authRegister(email, password) : await authLogin(email, password);
-    if (data.error) {
-      errEl.textContent   = data.error;
-      errEl.style.display = "";
-      btn.disabled    = false;
-      btn.textContent = isRegister ? "Create account" : "Sign in";
-    } else {
-      // Reload so init() runs fresh with the new session
-      window.location.reload();
-    }
-  } catch (err) {
-    errEl.textContent   = "Connection error. Please try again.";
-    errEl.style.display = "";
-    btn.disabled    = false;
-    btn.textContent = isRegister ? "Create account" : "Sign in";
-  }
-}
-
-async function handleLogout() {
-  await authLogout();
-  window.location.reload();
-}
 
 async function loadApp() {
   try {
@@ -1285,35 +1204,6 @@ async function loadApp() {
 // Init
 // ---------------------------------------------------------------------------
 async function init() {
-  // Check auth first
-  let authenticated = false;
-  try {
-    const me = await authMe();
-    authenticated = me.authenticated;
-  } catch (e) {
-    authenticated = false;
-  }
-
-  // Always wire up auth UI
-  document.querySelectorAll(".auth-tab").forEach(tab => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".auth-tab").forEach(t => t.classList.remove("active"));
-      tab.classList.add("active");
-      const isRegister = tab.dataset.tab === "register";
-      $("auth-submit-btn").textContent = isRegister ? "Create account" : "Sign in";
-      $("auth-password").autocomplete  = isRegister ? "new-password" : "current-password";
-      $("auth-error").style.display = "none";
-    });
-  });
-  $("auth-form").addEventListener("submit", handleAuthSubmit);
-  $("logout-btn").addEventListener("click", handleLogout);
-
-  if (!authenticated) {
-    showAuthScreen();
-    return; // Don't init the rest of the app
-  }
-
-  showAppScreen();
   await loadApp();
   initSearchFilter();
 
