@@ -699,16 +699,24 @@ def import_recipe():
     return jsonify(result)
 
 
+@app.route("/api/ping")
+def ping():
+    return jsonify({"ok": True})
+
+
 @app.route("/api/import/image", methods=["POST"])
 def import_recipe_from_image():
+    print("[image-import] request received", flush=True)
     data = request.get_json(force=True) or {}
     image_b64  = data.get("image")
     media_type = data.get("mediaType", "image/jpeg")
+    print(f"[image-import] image size: {len(image_b64) if image_b64 else 0} chars, mediaType: {media_type}", flush=True)
 
     if not image_b64:
         return jsonify({"error": "No image provided"}), 400
 
     try:
+        print("[image-import] calling Claude API…", flush=True)
         client = anthropic.Anthropic()
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -731,11 +739,15 @@ def import_recipe_from_image():
         )
         result = json.loads(message.content[0].text)
     except anthropic.AuthenticationError:
+        print("[image-import] auth error", flush=True)
         return jsonify({"error": "ANTHROPIC_API_KEY is not set or invalid"}), 500
-    except (json.JSONDecodeError, IndexError, KeyError):
+    except (json.JSONDecodeError, IndexError, KeyError) as exc:
+        print(f"[image-import] parse error: {exc}", flush=True)
         return jsonify({"error": "Could not parse recipe from image"}), 422
     except Exception as exc:
+        print(f"[image-import] exception: {exc}", flush=True)
         return jsonify({"error": str(exc)}), 500
+    print("[image-import] success", flush=True)
 
     if "error" in result:
         return jsonify(result), 422
