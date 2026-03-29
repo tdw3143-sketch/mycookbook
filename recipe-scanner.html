@@ -330,7 +330,7 @@ Rules:
         tags: [],
       };
       const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-      window.location.href = MYCOOKBOOK_URL + "/?import=" + encoded;
+      window.location.href = MYCOOKBOOK_URL + "/save-from-scanner?recipe=" + encoded;
     });
 
     function showToast(msg) {

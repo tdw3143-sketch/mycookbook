@@ -709,6 +709,35 @@ def delete_recipe(recipe_id):
     return jsonify({"ok": True})
 
 
+@app.route("/save-from-scanner")
+def save_from_scanner():
+    """Receive a base64-encoded recipe from the standalone scanner and save it directly."""
+    import base64 as _b64
+    encoded = request.args.get("recipe", "")
+    if not encoded:
+        return redirect("/")
+    try:
+        data = json.loads(_b64.b64decode(encoded.encode()).decode("utf-8"))
+    except Exception:
+        return redirect("/")
+    recipe = Recipe(
+        title       = data.get("title") or "Scanned Recipe",
+        description = data.get("description") or "",
+        image       = data.get("image") or "",
+        ingredients = data.get("ingredients") or [],
+        instructions= data.get("instructions") or [],
+        prep_time   = data.get("prepTime") or "",
+        cook_time   = data.get("cookTime") or "",
+        servings    = data.get("servings"),
+        source_url  = "",
+        tags        = [],
+        nutrition   = {},
+    )
+    db.session.add(recipe)
+    db.session.commit()
+    return redirect("/")
+
+
 @app.route("/api/import", methods=["POST"])
 def import_recipe():
     data = request.get_json(force=True)
