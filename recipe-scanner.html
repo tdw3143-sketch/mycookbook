@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recipe Scanner</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #FAF7F2;
+      color: #2C1810;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+    }
+    h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    p.sub { color: #8B7355; margin-bottom: 28px; font-size: 0.95rem; }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+    label { display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.9rem; }
+    input[type="password"], input[type="text"] {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #D4C4B0;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      background: #FAF7F2;
+    }
+    .photo-area {
+      border: 2px dashed #C4622D;
+      border-radius: 12px;
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin: 16px 0;
+    }
+    .photo-area:hover { background: #FFF3EE; }
+    .photo-area input { display: none; }
+    .photo-area .icon { font-size: 2.5rem; margin-bottom: 8px; }
+    .photo-area p { color: #8B7355; font-size: 0.9rem; }
+    #preview-img {
+      width: 100%; border-radius: 8px;
+      margin-top: 12px; display: none;
+    }
+    button.scan-btn {
+      width: 100%;
+      background: #C4622D;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    button.scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #status { text-align: center; color: #8B7355; margin: 12px 0; font-size: 0.9rem; }
+    #result { display: none; }
+    #result h2 { font-size: 1.1rem; margin-bottom: 12px; }
+    #result ul { list-style: none; }
+    #result ul li {
+      padding: 8px 0;
+      border-bottom: 1px solid #F0E8DD;
+      font-size: 0.95rem;
+    }
+    #result ul li:last-child { border-bottom: none; }
+    #result ul li::before { content: "• "; color: #C4622D; font-weight: bold; }
+    .error { color: #c0392b; font-size: 0.9rem; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>📷 Recipe Scanner</h1>
+  <p class="sub">Take a photo of a recipe — get the ingredients instantly.</p>
+
+  <div class="card">
+    <label for="api-key">Anthropic API Key</label>
+    <input type="password" id="api-key" placeholder="sk-ant-api03-…">
+    <p style="font-size:0.8rem;color:#8B7355;margin-top:6px">Stored locally in your browser, never sent anywhere else.</p>
+  </div>
+
+  <div class="card">
+    <label>Photo of recipe</label>
+    <div class="photo-area" onclick="document.getElementById('file-input').click()">
+      <div class="icon">📷</div>
+      <p>Tap to take a photo or choose from library</p>
+      <input type="file" id="file-input" accept="image/*" capture="environment">
+    </div>
+    <img id="preview-img" alt="Preview">
+    <button class="scan-btn" id="scan-btn" disabled>Scan Recipe</button>
+    <div id="status"></div>
+    <div class="error" id="error-msg"></div>
+  </div>
+
+  <div class="card" id="result">
+    <h2>🛒 Ingredients</h2>
+    <ul id="ingredients-list"></ul>
+  </div>
+
+  <script>
+    const apiKeyInput = document.getElementById("api-key");
+    const fileInput   = document.getElementById("file-input");
+    const previewImg  = document.getElementById("preview-img");
+    const scanBtn     = document.getElementById("scan-btn");
+    const status      = document.getElementById("status");
+    const errorMsg    = document.getElementById("error-msg");
+    const result      = document.getElementById("result");
+    const list        = document.getElementById("ingredients-list");
+
+    // Restore saved API key
+    apiKeyInput.value = localStorage.getItem("anthropic_key") || "";
+    apiKeyInput.addEventListener("change", () =>
+      localStorage.setItem("anthropic_key", apiKeyInput.value.trim())
+    );
+
+    let imageBase64 = null;
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      errorMsg.textContent = "";
+      result.style.display = "none";
+      status.textContent = "Resizing image…";
+      imageBase64 = await resizeImage(file);
+      previewImg.src = "data:image/jpeg;base64," + imageBase64;
+      previewImg.style.display = "block";
+      scanBtn.disabled = false;
+      status.textContent = "";
+    });
+
+    scanBtn.addEventListener("click", async () => {
+      const key = apiKeyInput.value.trim();
+      if (!key) { errorMsg.textContent = "Please enter your API key."; return; }
+      if (!imageBase64) { errorMsg.textContent = "Please select a photo first."; return; }
+
+      scanBtn.disabled = true;
+      errorMsg.textContent = "";
+      result.style.display = "none";
+      status.textContent = "Reading recipe…";
+
+      try {
+        const resp = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+          },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 1024,
+            messages: [{
+              role: "user",
+              content: [
+                { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imageBase64 } },
+                { type: "text", text: 'List ONLY the ingredients from this recipe image. Return a JSON array of strings, one ingredient per item. Example: ["200g flour", "2 eggs"]. Return ONLY the JSON array, no other text.' }
+              ]
+            }]
+          })
+        });
+
+        const data = await resp.json();
+        if (!resp.ok) {
+          errorMsg.textContent = "API error: " + (data.error?.message || resp.status);
+          return;
+        }
+
+        const text = data.content[0].text.trim();
+        // Strip markdown code fences if present
+        const cleaned = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+        const ingredients = JSON.parse(cleaned);
+
+        list.innerHTML = ingredients.map(i => `<li>${i}</li>`).join("");
+        result.style.display = "block";
+        status.textContent = "";
+      } catch (err) {
+        errorMsg.textContent = "Error: " + err.message;
+        status.textContent = "";
+      } finally {
+        scanBtn.disabled = false;
+      }
+    });
+
+    function resizeImage(file) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const MAX = 800;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else { width = Math.round(width * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+        };
+        img.onerror = reject;
+        img.src = url;
+      });
+    }
+  </script>
+</body>
+</html>
