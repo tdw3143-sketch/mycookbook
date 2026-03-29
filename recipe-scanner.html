@@ -17,7 +17,7 @@
       padding: 32px 16px;
     }
     h1 { font-size: 1.6rem; margin-bottom: 8px; }
-    p.sub { color: #8B7355; margin-bottom: 28px; font-size: 0.95rem; }
+    p.sub { color: #8B7355; margin-bottom: 28px; font-size: 0.95rem; text-align: center; }
 
     .card {
       background: #fff;
@@ -64,22 +64,41 @@
       margin-top: 8px;
     }
     button.scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    #status { text-align: center; color: #8B7355; margin: 12px 0; font-size: 0.9rem; }
+    #status { text-align: center; color: #8B7355; margin: 12px 0; font-size: 0.9rem; min-height: 20px; }
     .error { color: #c0392b; font-size: 0.9rem; margin-top: 8px; }
 
     /* Results */
     #result { display: none; }
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .result-header h2 { font-size: 1.05rem; font-weight: 700; color: #C4622D; }
+    .copy-btn {
+      background: #F5EDE4;
+      color: #C4622D;
+      border: 1px solid #D4A984;
+      border-radius: 8px;
+      padding: 5px 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .copy-btn:active { background: #E8D5C4; }
     .result-section { margin-bottom: 24px; }
     .result-section:last-child { margin-bottom: 0; }
-    .result-section h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; color: #C4622D; }
-    .result-section .meta { font-size: 0.85rem; color: #8B7355; margin-bottom: 10px; }
-    .result-section ul, .result-section ol { padding-left: 20px; }
+    .meta { font-size: 0.85rem; color: #8B7355; margin-bottom: 10px; }
+    .result-section ul { list-style: none; padding: 0; }
+    .result-section ol { padding-left: 20px; }
     .result-section li {
-      padding: 6px 0;
+      padding: 7px 0;
       border-bottom: 1px solid #F0E8DD;
       font-size: 0.95rem;
       line-height: 1.4;
     }
+    .result-section ul li::before { content: "• "; color: #C4622D; font-weight: bold; }
     .result-section li:last-child { border-bottom: none; }
     .skipped {
       font-size: 0.82rem;
@@ -87,34 +106,53 @@
       margin-top: 8px;
       font-style: italic;
     }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2C1810;
+      color: #fff;
+      padding: 10px 22px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
   </style>
 </head>
 <body>
   <h1>📷 Recipe Scanner</h1>
-  <p class="sub">Take a photo of a recipe — get ingredients &amp; instructions.</p>
+  <p class="sub">Photograph a recipe book page — get the shopping list &amp; instructions instantly.</p>
 
   <div class="card">
     <label for="api-key">Anthropic API Key</label>
     <input type="password" id="api-key" placeholder="sk-ant-api03-…">
-    <p style="font-size:0.8rem;color:#8B7355;margin-top:6px">Stored locally in your browser, never sent anywhere else.</p>
+    <p style="font-size:0.8rem;color:#8B7355;margin-top:6px">Stored in your browser only, never shared.</p>
   </div>
 
   <div class="card">
-    <label>Photo of recipe</label>
+    <label>Photo of recipe (book page, magazine, screen…)</label>
     <div class="photo-area" onclick="document.getElementById('file-input').click()">
       <div class="icon">📷</div>
       <p>Tap to take a photo or choose from library</p>
       <input type="file" id="file-input" accept="image/*">
     </div>
     <img id="preview-img" alt="Preview">
-    <button class="scan-btn" id="scan-btn" disabled>Scan Recipe</button>
+    <button class="scan-btn" id="scan-btn" disabled>📖 Scan Recipe</button>
     <div id="status"></div>
     <div class="error" id="error-msg"></div>
   </div>
 
   <div class="card" id="result">
     <div class="result-section">
-      <h2>🛒 Ingredients to buy</h2>
+      <div class="result-header">
+        <h2>🛒 Ingredients to buy</h2>
+        <button class="copy-btn" id="copy-btn">📋 Copy list</button>
+      </div>
       <div class="meta" id="servings-meta"></div>
       <ul id="ingredients-list"></ul>
       <div class="skipped" id="skipped-msg"></div>
@@ -125,8 +163,12 @@
     </div>
   </div>
 
+  <div class="toast" id="toast"></div>
+
   <script>
-    const PROMPT = `You are a smart recipe assistant. Analyse this recipe image and return a JSON object with these exact fields:
+    const PROMPT = `You are a smart recipe assistant. Look at this photo of a recipe — it may be one or two pages of a recipe book, a magazine, a handwritten card, or any other format.
+
+Extract the recipe and return a JSON object with these exact fields:
 
 {
   "title": "Recipe name",
@@ -137,12 +179,13 @@
 }
 
 Rules:
-1. ingredients: include ONLY things someone needs to BUY. Include quantities and units. Do NOT include everyday staples that most people already have at home (salt, pepper, olive oil, butter, water, flour, sugar, vinegar, garlic — skip these into skipped_staples instead).
-2. skipped_staples: list the staples you left out of the shopping list.
-3. Remove any footnote references from ingredient names (e.g. "Mayonnaise 3)" → "Mayonnaise"). Remove numbers or symbols that refer to footnotes, tips, or page references.
-4. instructions: copy the cooking steps clearly and concisely, one step per item.
-5. servings: the number of people the recipe serves (integer). If unclear, estimate based on quantities.
-6. Return ONLY the JSON object. No markdown, no explanation.`;
+1. ingredients: include ONLY things someone needs to BUY. Always include quantities and units. Do NOT include everyday staples people already have at home — skip these into skipped_staples instead. Common staples to skip: salt, pepper, black pepper, olive oil, sunflower oil, vegetable oil, butter, water, plain flour, sugar, white sugar, brown sugar, vinegar, baking powder, baking soda, garlic (only if used as a basic seasoning).
+2. skipped_staples: list every staple you left out.
+3. Remove any footnote references, numbers or symbols from ingredient names (e.g. "Mayonnaise 3)" → "Mayonnaise", "Flour *" → "Flour").
+4. instructions: one clear cooking step per item, in order. If steps span two pages, include all of them.
+5. servings: how many people the recipe serves (integer). Estimate from quantities if not stated.
+6. If the photo shows two pages, extract from both pages.
+7. Return ONLY the JSON object. No markdown, no explanation, no code fences.`;
 
     const apiKeyInput = document.getElementById("api-key");
     const fileInput   = document.getElementById("file-input");
@@ -151,6 +194,8 @@ Rules:
     const status      = document.getElementById("status");
     const errorMsg    = document.getElementById("error-msg");
     const result      = document.getElementById("result");
+    const copyBtn     = document.getElementById("copy-btn");
+    const toastEl     = document.getElementById("toast");
 
     apiKeyInput.value = localStorage.getItem("anthropic_key") || "";
     apiKeyInput.addEventListener("change", () =>
@@ -158,6 +203,7 @@ Rules:
     );
 
     let imageBase64 = null;
+    let lastIngredients = [];
 
     fileInput.addEventListener("change", async () => {
       const file = fileInput.files[0];
@@ -180,7 +226,7 @@ Rules:
       scanBtn.disabled = true;
       errorMsg.textContent = "";
       result.style.display = "none";
-      status.textContent = "Reading recipe… (this takes a few seconds)";
+      status.textContent = "Reading recipe… (takes a few seconds)";
 
       try {
         const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -214,25 +260,20 @@ Rules:
           .replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
         const recipe = JSON.parse(raw);
 
-        // Servings
-        const servingsMeta = document.getElementById("servings-meta");
-        servingsMeta.textContent = recipe.servings ? `For ${recipe.servings} people` : "";
+        lastIngredients = recipe.ingredients || [];
 
-        // Ingredients
-        const ingList = document.getElementById("ingredients-list");
-        ingList.innerHTML = (recipe.ingredients || []).map(i => `<li>${escHtml(i)}</li>`).join("");
+        document.getElementById("servings-meta").textContent =
+          recipe.servings ? `For ${recipe.servings} people` : "";
 
-        // Skipped staples
-        const skippedMsg = document.getElementById("skipped-msg");
-        if (recipe.skipped_staples?.length) {
-          skippedMsg.textContent = `Already assumed at home: ${recipe.skipped_staples.join(", ")}`;
-        } else {
-          skippedMsg.textContent = "";
-        }
+        document.getElementById("ingredients-list").innerHTML =
+          lastIngredients.map(i => `<li>${escHtml(i)}</li>`).join("");
 
-        // Instructions
-        const instrList = document.getElementById("instructions-list");
-        instrList.innerHTML = (recipe.instructions || []).map(s => `<li>${escHtml(s)}</li>`).join("");
+        const skipped = recipe.skipped_staples || [];
+        document.getElementById("skipped-msg").textContent =
+          skipped.length ? `Already assumed at home: ${skipped.join(", ")}` : "";
+
+        document.getElementById("instructions-list").innerHTML =
+          (recipe.instructions || []).map(s => `<li>${escHtml(s)}</li>`).join("");
 
         result.style.display = "block";
         status.textContent = "";
@@ -245,6 +286,30 @@ Rules:
       }
     });
 
+    copyBtn.addEventListener("click", () => {
+      if (!lastIngredients.length) return;
+      const text = "🛒 Shopping list\n\n" + lastIngredients.map(i => "• " + i).join("\n");
+      navigator.clipboard.writeText(text)
+        .then(() => showToast("Copied to clipboard!"))
+        .catch(() => {
+          // Fallback for older iOS
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.focus(); ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          showToast("Copied!");
+        });
+    });
+
+    function showToast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      setTimeout(() => toastEl.classList.remove("show"), 2000);
+    }
+
     function escHtml(str) {
       return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     }
@@ -255,7 +320,7 @@ Rules:
         const url = URL.createObjectURL(file);
         img.onload = () => {
           URL.revokeObjectURL(url);
-          const MAX = 800;
+          const MAX = 1200;
           let { width, height } = img;
           if (width > MAX || height > MAX) {
             if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
@@ -264,7 +329,7 @@ Rules:
           const canvas = document.createElement("canvas");
           canvas.width = width; canvas.height = height;
           canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+          resolve(canvas.toDataURL("image/jpeg", 0.85).split(",")[1]);
         };
         img.onerror = reject;
         img.src = url;
