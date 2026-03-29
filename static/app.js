@@ -1244,7 +1244,7 @@ async function init() {
     try {
       const recipe = JSON.parse(decodeURIComponent(escape(atob(importParam))));
       history.replaceState(null, "", "/");
-      openPreviewModal(recipe);
+      setTimeout(() => openPreviewModal(recipe), 300);
     } catch (e) { /* ignore malformed param */ }
   }
 
