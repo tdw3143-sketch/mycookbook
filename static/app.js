@@ -503,7 +503,7 @@ async function handleImageImport(e) {
     const resp = await fetch("/api/import/image", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: base64, mediaType: file.type || "image/jpeg" }),
+      body: JSON.stringify({ image: base64, mediaType: "image/jpeg" }),
     });
     const data = await resp.json();
     if (data.error) { toast(data.error, "error"); return; }
