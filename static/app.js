@@ -1238,6 +1238,16 @@ async function init() {
   await loadApp();
   initSearchFilter();
 
+  // Handle ?import= from Recipe Scanner
+  const importParam = new URLSearchParams(window.location.search).get("import");
+  if (importParam) {
+    try {
+      const recipe = JSON.parse(decodeURIComponent(escape(atob(importParam))));
+      history.replaceState(null, "", "/");
+      openPreviewModal(recipe);
+    } catch (e) { /* ignore malformed param */ }
+  }
+
   // Home button
   $("home-btn").addEventListener("click", () => showView("recipes"));
 

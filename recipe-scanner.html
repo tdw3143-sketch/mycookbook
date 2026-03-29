@@ -315,42 +315,22 @@ Rules:
         });
     });
 
-    saveBtn.addEventListener("click", async () => {
+    saveBtn.addEventListener("click", () => {
       if (!lastRecipe) return;
-      saveBtn.disabled = true;
-      saveBtn.textContent = "Saving…";
-      saveError.textContent = "";
-      try {
-        const resp = await fetch(MYCOOKBOOK_URL + "/api/recipes", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: lastRecipe.title || "Scanned Recipe",
-            description: "",
-            image: "",
-            ingredients: lastRecipe.ingredients || [],
-            instructions: lastRecipe.instructions || [],
-            prepTime: "",
-            cookTime: "",
-            servings: lastRecipe.servings || null,
-            source_url: "",
-            tags: [],
-          }),
-        });
-        const data = await resp.json();
-        if (!resp.ok) { saveError.textContent = "Error: " + (data.error || resp.status); return; }
-        showToast("Saved to MyCookbook! ✓");
-        saveBtn.textContent = "✓ Saved!";
-        saveBtn.style.background = "#888";
-      } catch (err) {
-        saveError.textContent = "Could not reach MyCookbook: " + err.message;
-      } finally {
-        setTimeout(() => {
-          saveBtn.disabled = false;
-          saveBtn.textContent = "📚 Save to MyCookbook";
-          saveBtn.style.background = "#5C8B3A";
-        }, 3000);
-      }
+      const payload = {
+        title: lastRecipe.title || "Scanned Recipe",
+        description: "",
+        image: "",
+        ingredients: lastRecipe.ingredients || [],
+        instructions: lastRecipe.instructions || [],
+        prepTime: "",
+        cookTime: "",
+        servings: lastRecipe.servings || null,
+        source_url: "",
+        tags: [],
+      };
+      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+      window.open(MYCOOKBOOK_URL + "/?import=" + encoded, "_blank");
     });
 
     function showToast(msg) {
