@@ -161,6 +161,10 @@
       <h2>👨‍🍳 Instructions</h2>
       <ol id="instructions-list"></ol>
     </div>
+    <button class="scan-btn" id="save-btn" style="background:#5C8B3A;margin-top:8px">
+      📚 Save to MyCookbook
+    </button>
+    <div class="error" id="save-error"></div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -195,7 +199,11 @@ Rules:
     const errorMsg    = document.getElementById("error-msg");
     const result      = document.getElementById("result");
     const copyBtn     = document.getElementById("copy-btn");
+    const saveBtn     = document.getElementById("save-btn");
+    const saveError   = document.getElementById("save-error");
     const toastEl     = document.getElementById("toast");
+
+    const MYCOOKBOOK_URL = "https://web-production-51557.up.railway.app";
 
     apiKeyInput.value = localStorage.getItem("anthropic_key") || "";
     apiKeyInput.addEventListener("change", () =>
@@ -204,6 +212,7 @@ Rules:
 
     let imageBase64 = null;
     let lastIngredients = [];
+    let lastRecipe = null;
 
     fileInput.addEventListener("change", async () => {
       const file = fileInput.files[0];
@@ -275,6 +284,8 @@ Rules:
         document.getElementById("instructions-list").innerHTML =
           (recipe.instructions || []).map(s => `<li>${escHtml(s)}</li>`).join("");
 
+        lastRecipe = recipe;
+        saveError.textContent = "";
         result.style.display = "block";
         status.textContent = "";
         result.scrollIntoView({ behavior: "smooth" });
@@ -302,6 +313,44 @@ Rules:
           document.body.removeChild(ta);
           showToast("Copied!");
         });
+    });
+
+    saveBtn.addEventListener("click", async () => {
+      if (!lastRecipe) return;
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving…";
+      saveError.textContent = "";
+      try {
+        const resp = await fetch(MYCOOKBOOK_URL + "/api/recipes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: lastRecipe.title || "Scanned Recipe",
+            description: "",
+            image: "",
+            ingredients: lastRecipe.ingredients || [],
+            instructions: lastRecipe.instructions || [],
+            prepTime: "",
+            cookTime: "",
+            servings: lastRecipe.servings || null,
+            source_url: "",
+            tags: [],
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { saveError.textContent = "Error: " + (data.error || resp.status); return; }
+        showToast("Saved to MyCookbook! ✓");
+        saveBtn.textContent = "✓ Saved!";
+        saveBtn.style.background = "#888";
+      } catch (err) {
+        saveError.textContent = "Could not reach MyCookbook: " + err.message;
+      } finally {
+        setTimeout(() => {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "📚 Save to MyCookbook";
+          saveBtn.style.background = "#5C8B3A";
+        }, 3000);
+      }
     });
 
     function showToast(msg) {

@@ -11,10 +11,12 @@ from dotenv import load_dotenv
 load_dotenv()
 from bs4 import BeautifulSoup
 from flask import Flask, jsonify, render_template, request
+from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 
 app = Flask(__name__)
+CORS(app, origins=["https://tdw3143-sketch.github.io"])
 
 # Railway (and most cloud hosts) terminate TLS at their edge proxy and forward
 # plain HTTP to the app. ProxyFix makes Flask trust the X-Forwarded-* headers
