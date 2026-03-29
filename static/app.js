@@ -1235,7 +1235,7 @@ async function loadApp() {
 // Init
 // ---------------------------------------------------------------------------
 async function init() {
-  await loadApp();
+  try { await loadApp(); } catch(e) { console.warn("loadApp failed:", e); }
   initSearchFilter();
 
   // Handle ?import= from Recipe Scanner
