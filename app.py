@@ -711,7 +711,7 @@ def import_recipe_from_image():
     try:
         client = anthropic.Anthropic()
         message = client.messages.create(
-            model="claude-sonnet-4-6",
+            model="claude-haiku-4-5-20251001",
             max_tokens=2048,
             messages=[{
                 "role": "user",
