@@ -11,12 +11,31 @@ from dotenv import load_dotenv
 load_dotenv()
 from bs4 import BeautifulSoup
 from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 
 app = Flask(__name__)
-CORS(app, origins=["https://tdw3143-sketch.github.io"])
+
+CORS_ORIGIN = "https://tdw3143-sketch.github.io"
+
+@app.after_request
+def add_cors(response):
+    origin = request.headers.get("Origin", "")
+    if origin == CORS_ORIGIN:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+@app.route("/api/<path:path>", methods=["OPTIONS"])
+def cors_preflight(path):
+    response = app.make_default_options_response()
+    origin = request.headers.get("Origin", "")
+    if origin == CORS_ORIGIN:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
 
 # Railway (and most cloud hosts) terminate TLS at their edge proxy and forward
 # plain HTTP to the app. ProxyFix makes Flask trust the X-Forwarded-* headers
