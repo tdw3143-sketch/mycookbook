@@ -24,12 +24,12 @@
       border-radius: 16px;
       padding: 24px;
       width: 100%;
-      max-width: 480px;
+      max-width: 520px;
       box-shadow: 0 2px 12px rgba(0,0,0,0.08);
       margin-bottom: 20px;
     }
     label { display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.9rem; }
-    input[type="password"], input[type="text"] {
+    input[type="password"] {
       width: 100%;
       padding: 10px 14px;
       border: 1px solid #D4C4B0;
@@ -50,10 +50,7 @@
     .photo-area input { display: none; }
     .photo-area .icon { font-size: 2.5rem; margin-bottom: 8px; }
     .photo-area p { color: #8B7355; font-size: 0.9rem; }
-    #preview-img {
-      width: 100%; border-radius: 8px;
-      margin-top: 12px; display: none;
-    }
+    #preview-img { width: 100%; border-radius: 8px; margin-top: 12px; display: none; }
     button.scan-btn {
       width: 100%;
       background: #C4622D;
@@ -68,22 +65,33 @@
     }
     button.scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     #status { text-align: center; color: #8B7355; margin: 12px 0; font-size: 0.9rem; }
+    .error { color: #c0392b; font-size: 0.9rem; margin-top: 8px; }
+
+    /* Results */
     #result { display: none; }
-    #result h2 { font-size: 1.1rem; margin-bottom: 12px; }
-    #result ul { list-style: none; }
-    #result ul li {
-      padding: 8px 0;
+    .result-section { margin-bottom: 24px; }
+    .result-section:last-child { margin-bottom: 0; }
+    .result-section h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; color: #C4622D; }
+    .result-section .meta { font-size: 0.85rem; color: #8B7355; margin-bottom: 10px; }
+    .result-section ul, .result-section ol { padding-left: 20px; }
+    .result-section li {
+      padding: 6px 0;
       border-bottom: 1px solid #F0E8DD;
       font-size: 0.95rem;
+      line-height: 1.4;
     }
-    #result ul li:last-child { border-bottom: none; }
-    #result ul li::before { content: "• "; color: #C4622D; font-weight: bold; }
-    .error { color: #c0392b; font-size: 0.9rem; margin-top: 8px; }
+    .result-section li:last-child { border-bottom: none; }
+    .skipped {
+      font-size: 0.82rem;
+      color: #A0856B;
+      margin-top: 8px;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
   <h1>📷 Recipe Scanner</h1>
-  <p class="sub">Take a photo of a recipe — get the ingredients instantly.</p>
+  <p class="sub">Take a photo of a recipe — get ingredients &amp; instructions.</p>
 
   <div class="card">
     <label for="api-key">Anthropic API Key</label>
@@ -96,7 +104,7 @@
     <div class="photo-area" onclick="document.getElementById('file-input').click()">
       <div class="icon">📷</div>
       <p>Tap to take a photo or choose from library</p>
-      <input type="file" id="file-input" accept="image/*" capture="environment">
+      <input type="file" id="file-input" accept="image/*">
     </div>
     <img id="preview-img" alt="Preview">
     <button class="scan-btn" id="scan-btn" disabled>Scan Recipe</button>
@@ -105,11 +113,37 @@
   </div>
 
   <div class="card" id="result">
-    <h2>🛒 Ingredients</h2>
-    <ul id="ingredients-list"></ul>
+    <div class="result-section">
+      <h2>🛒 Ingredients to buy</h2>
+      <div class="meta" id="servings-meta"></div>
+      <ul id="ingredients-list"></ul>
+      <div class="skipped" id="skipped-msg"></div>
+    </div>
+    <div class="result-section">
+      <h2>👨‍🍳 Instructions</h2>
+      <ol id="instructions-list"></ol>
+    </div>
   </div>
 
   <script>
+    const PROMPT = `You are a smart recipe assistant. Analyse this recipe image and return a JSON object with these exact fields:
+
+{
+  "title": "Recipe name",
+  "servings": 4,
+  "ingredients": ["200g pasta", "1 onion", "400g canned tomatoes"],
+  "skipped_staples": ["salt", "pepper", "olive oil"],
+  "instructions": ["Boil the pasta for 10 minutes.", "Fry the onion until soft."]
+}
+
+Rules:
+1. ingredients: include ONLY things someone needs to BUY. Include quantities and units. Do NOT include everyday staples that most people already have at home (salt, pepper, olive oil, butter, water, flour, sugar, vinegar, garlic — skip these into skipped_staples instead).
+2. skipped_staples: list the staples you left out of the shopping list.
+3. Remove any footnote references from ingredient names (e.g. "Mayonnaise 3)" → "Mayonnaise"). Remove numbers or symbols that refer to footnotes, tips, or page references.
+4. instructions: copy the cooking steps clearly and concisely, one step per item.
+5. servings: the number of people the recipe serves (integer). If unclear, estimate based on quantities.
+6. Return ONLY the JSON object. No markdown, no explanation.`;
+
     const apiKeyInput = document.getElementById("api-key");
     const fileInput   = document.getElementById("file-input");
     const previewImg  = document.getElementById("preview-img");
@@ -117,9 +151,7 @@
     const status      = document.getElementById("status");
     const errorMsg    = document.getElementById("error-msg");
     const result      = document.getElementById("result");
-    const list        = document.getElementById("ingredients-list");
 
-    // Restore saved API key
     apiKeyInput.value = localStorage.getItem("anthropic_key") || "";
     apiKeyInput.addEventListener("change", () =>
       localStorage.setItem("anthropic_key", apiKeyInput.value.trim())
@@ -148,7 +180,7 @@
       scanBtn.disabled = true;
       errorMsg.textContent = "";
       result.style.display = "none";
-      status.textContent = "Reading recipe…";
+      status.textContent = "Reading recipe… (this takes a few seconds)";
 
       try {
         const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -161,12 +193,12 @@
           },
           body: JSON.stringify({
             model: "claude-haiku-4-5-20251001",
-            max_tokens: 1024,
+            max_tokens: 2048,
             messages: [{
               role: "user",
               content: [
                 { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imageBase64 } },
-                { type: "text", text: 'List ONLY the ingredients from this recipe image. Return a JSON array of strings, one ingredient per item. Example: ["200g flour", "2 eggs"]. Return ONLY the JSON array, no other text.' }
+                { type: "text", text: PROMPT }
               ]
             }]
           })
@@ -178,14 +210,33 @@
           return;
         }
 
-        const text = data.content[0].text.trim();
-        // Strip markdown code fences if present
-        const cleaned = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
-        const ingredients = JSON.parse(cleaned);
+        const raw = data.content[0].text.trim()
+          .replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+        const recipe = JSON.parse(raw);
 
-        list.innerHTML = ingredients.map(i => `<li>${i}</li>`).join("");
+        // Servings
+        const servingsMeta = document.getElementById("servings-meta");
+        servingsMeta.textContent = recipe.servings ? `For ${recipe.servings} people` : "";
+
+        // Ingredients
+        const ingList = document.getElementById("ingredients-list");
+        ingList.innerHTML = (recipe.ingredients || []).map(i => `<li>${escHtml(i)}</li>`).join("");
+
+        // Skipped staples
+        const skippedMsg = document.getElementById("skipped-msg");
+        if (recipe.skipped_staples?.length) {
+          skippedMsg.textContent = `Already assumed at home: ${recipe.skipped_staples.join(", ")}`;
+        } else {
+          skippedMsg.textContent = "";
+        }
+
+        // Instructions
+        const instrList = document.getElementById("instructions-list");
+        instrList.innerHTML = (recipe.instructions || []).map(s => `<li>${escHtml(s)}</li>`).join("");
+
         result.style.display = "block";
         status.textContent = "";
+        result.scrollIntoView({ behavior: "smooth" });
       } catch (err) {
         errorMsg.textContent = "Error: " + err.message;
         status.textContent = "";
@@ -193,6 +244,10 @@
         scanBtn.disabled = false;
       }
     });
+
+    function escHtml(str) {
+      return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
 
     function resizeImage(file) {
       return new Promise((resolve, reject) => {
@@ -207,8 +262,7 @@
             else { width = Math.round(width * MAX / height); height = MAX; }
           }
           const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
+          canvas.width = width; canvas.height = height;
           canvas.getContext("2d").drawImage(img, 0, 0, width, height);
           resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
         };
