@@ -168,14 +168,6 @@ async function apiAhDisconnect() {
   return r.json();
 }
 
-async function apiAhSendList(items) {
-  const r = await fetch("/api/ah/shopping-list", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items }),
-  });
-  return { status: r.status, data: await r.json() };
-}
 
 // ---------------------------------------------------------------------------
 // Navigation
@@ -1025,7 +1017,7 @@ function renderShoppingList() {
     <h2 style="font-size:1.2rem">Shopping List</h2>
     <div style="display:flex;gap:8px">
       <button class="btn btn-secondary btn-sm" id="copy-list-btn">📋 Copy</button>
-      <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ Print</button>
+      <button class="btn btn-secondary btn-sm" id="share-list-inline-btn">📤 Share</button>
     </div>
   </div>`;
 
@@ -1044,6 +1036,7 @@ function renderShoppingList() {
   panel.innerHTML = html;
 
   $("copy-list-btn").addEventListener("click", copyShoppingList);
+  $("share-list-inline-btn").addEventListener("click", shareShoppingList);
 }
 
 function buildShoppingListText() {
@@ -1082,21 +1075,6 @@ async function shareShoppingList() {
       .then(() => toast("Copied to clipboard!"))
       .catch(() => toast("Copy failed", "error"));
   }
-}
-
-// ---------------------------------------------------------------------------
-// Store toggle
-// ---------------------------------------------------------------------------
-
-function initStoreToggle() {
-  const radios = document.querySelectorAll(".store-toggle input");
-  radios.forEach(r => { r.checked = r.value === state.store; });
-  radios.forEach(radio => {
-    radio.addEventListener("change", () => {
-      state.store = radio.value;
-      localStorage.setItem("store", state.store);
-    });
-  });
 }
 
 
